@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+code = '''import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, Dimensions, ScrollView, TextInput, Alert, Modal } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
@@ -189,3 +189,8 @@ const s = StyleSheet.create({
   input:{backgroundColor:'#111',color:'#fff',borderRadius:12,padding:14,fontSize:14,marginVertical:16,borderWidth:1,borderColor:'#FF6B00'},
   playBtn:{backgroundColor:'#FF6B00',padding:16,borderRadius:12,alignItems:'center'},
 });
+'''
+f = open('App.tsx', 'w')
+f.write(code)
+f.close()
+print('Done! NexPlayer written.')
