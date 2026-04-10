@@ -1,255 +1,133 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, Dimensions, ScrollView, TextInput, Modal } from "react-native";
-import { Video, ResizeMode } from "expo-av";
-import * as DocumentPicker from "expo-document-picker";
-import * as MediaLibrary from "expo-media-library";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width: W } = Dimensions.get("window");
-const SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+import { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Dimensions, StatusBar } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
+import * as DocumentPicker from 'expo-document-picker';
 
+const { width } = Dimensions.get('window');
 export default function App() {
-  const [screen, setScreen] = useState("home");
-  const [videos, setVideos] = useState([]);
-  const [current, setCurrent] = useState(null);
-  const [playing, setPlaying] = useState(false);
-  const [pos, setPos] = useState(0);
-  const [dur, setDur] = useState(0);
-  const [speed, setSpeed] = useState(1.0);
-  const [loop, setLoop] = useState(false);
-  const [showCtrl, setShowCtrl] = useState(true);
-  const [showSpeed, setShowSpeed] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [netUrl, setNetUrl] = useState("");
-  const [idx, setIdx] = useState(0);
   const videoRef = useRef(null);
+  const [videoUri, setVideoUri] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+  const [volume, setVolume] = useState(1.0);
+  const [playlist, setPlaylist] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [subtitleText, setSubtitleText] = useState('');
+  const [subtitles, setSubtitles] = useState([]);
 
   useEffect(() => {
-    AsyncStorage.getItem("history").then(h => { if (h) setHistory(JSON.parse(h)); });
-    MediaLibrary.requestPermissionsAsync();
-  }, []);
-
-  const fmt = ms => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m + ":" + String(sec).padStart(2, "0");
-  };
-
-  const play = async (v, i) => {
-    setCurrent(v);
-    setIdx(i || 0);
-    setScreen("player");
-    setPlaying(true);
-    setShowCtrl(true);
-    const h = [v, ...history.filter(x => x.id !== v.id)].slice(0, 30);
-    setHistory(h);
-    AsyncStorage.setItem("history", JSON.stringify(h));
-  };
+    if (subtitles.length > 0) {
+      const cur = subtitles.find(s => position >= s.start && position <= s.end);
+      setSubtitleText(cur ? cur.text : '');
+    }
+  }, [position, subtitles]);
 
   const pickVideo = async () => {
-    try {
-      const r = await DocumentPicker.getDocumentAsync({ type: "video/*", multiple: true });
-      if (!r.canceled && r.assets) {
-        setVideos(p => [...p, ...r.assets.map(a => ({ id: Date.now() + Math.random(), uri: a.uri, name: a.name || "Video" }))]);
-      }
-    } catch (e) {}
+    const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', multiple: true, copyToCacheDirectory: true });
+    if (!result.canceled) { setPlaylist(result.assets); setVideoUri(result.assets[0].uri); setCurrentIndex(0); }
   };
 
-  const loadGallery = async () => {
-    try {
-      const { assets } = await MediaLibrary.getAssetsAsync({ mediaType: "video", first: 200 });
-      setVideos(p => {
-        const ids = new Set(p.map(v => v.id));
-        return [...p, ...assets.filter(a => !ids.has(a.id)).map(a => ({ id: a.id, uri: a.uri, name: a.filename, duration: a.duration }))];
-      });
-    } catch (e) {}
-  };
-
-  const onStatus = s => {
-    if (s.isLoaded) {
-      setPos(s.positionMillis || 0);
-      setDur(s.durationMillis || 0);
-      setPlaying(s.isPlaying);
-      if (s.didJustFinish) {
-        if (loop) {
-          videoRef.current?.replayAsync();
-        } else if (idx < videos.length - 1) {
-          play(videos[idx + 1], idx + 1);
-        }
-      }
+  const pickSubtitle = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: 'text/*', copyToCacheDirectory: true });
+    if (!result.canceled) {
+      const res = await fetch(result.assets[0].uri);
+      const text = await res.text();
+      const blocks = text.trim().split(/\n\n/);
+      const toMs = (t) => { if (!t) return 0; const p = t.trim().replace(',','.').split(':'); return (parseFloat(p[0])*3600+parseFloat(p[1])*60+parseFloat(p[2]))*1000; };
+      const parsed = blocks.map(b => { const l = b.split('\n'); if (l.length < 3) return null; const t = l[1].split(' --> '); return { start: toMs(t[0]), end: toMs(t[1]), text: l.slice(2).join('\n') }; }).filter(Boolean);
+      setSubtitles(parsed);
     }
   };
 
-  if (screen === "player" && current) return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
-      <StatusBar hidden />
-      <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setShowCtrl(p => !p)}>
-        <Video
-          ref={videoRef}
-          source={{ uri: current.uri }}
-          style={{ flex: 1 }}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={playing}
-          rate={speed}
-          isLooping={loop}
-          onPlaybackStatusUpdate={onStatus}
-        />
-      </TouchableOpacity>
-      {showCtrl && (
-        <View style={s.overlay}>
-          <View style={s.topBar}>
-            <TouchableOpacity onPress={() => { setScreen("home"); setPlaying(false); }}>
-              <Text style={s.back}>← Back</Text>
-            </TouchableOpacity>
-            <Text style={s.title} numberOfLines={1}>{current.name}</Text>
-          </View>
-          <View style={s.center}>
-            <TouchableOpacity onPress={() => { if (idx > 0) play(videos[idx - 1], idx - 1); }}>
-              <Text style={s.btn}>⏮</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => videoRef.current?.setPositionAsync(Math.max(0, pos - 10000))}>
-              <Text style={s.btn}>⏪</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { playing ? videoRef.current?.pauseAsync() : videoRef.current?.playAsync(); setPlaying(!playing); }}>
-              <Text style={[s.btn, { fontSize: 56, color: "#FF6B00" }]}>{playing ? "⏸" : "▶"}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => videoRef.current?.setPositionAsync(Math.min(dur, pos + 10000))}>
-              <Text style={s.btn}>⏩</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { if (idx < videos.length - 1) play(videos[idx + 1], idx + 1); }}>
-              <Text style={s.btn}>⏭</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={s.prog}>
-            <Text style={s.time}>{fmt(pos)}</Text>
-            <TouchableOpacity style={{ flex: 1, height: 24, justifyContent: "center" }} onPress={e => videoRef.current?.setPositionAsync((e.nativeEvent.locationX / (W - 120)) * dur)}>
-              <View style={{ height: 4, backgroundColor: "rgba(255,255,255,0.3)", borderRadius: 2 }}>
-                <View style={{ height: 4, backgroundColor: "#FF6B00", borderRadius: 2, width: dur > 0 ? ((pos / dur) * 100) + "%" : "0%" }} />
-              </View>
-            </TouchableOpacity>
-            <Text style={s.time}>{fmt(dur)}</Text>
-          </View>
-          <View style={s.bot}>
-            <TouchableOpacity onPress={() => setShowSpeed(true)} style={s.botBtn}>
-              <Text style={s.botTxt}>{speed}x Speed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setLoop(!loop)} style={s.botBtn}>
-              <Text style={s.botTxt}>{loop ? "🔂 Loop" : "🔁 Loop"}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={pickVideo} style={s.botBtn}>
-              <Text style={s.botTxt}>+ Video</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-      <Modal visible={showSpeed} transparent animationType="fade">
-        <TouchableOpacity style={s.modalBg} onPress={() => setShowSpeed(false)}>
-          <View style={{ backgroundColor: "#1a1a1a", width: 250, borderRadius: 16, overflow: "hidden" }}>
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", padding: 16, textAlign: "center" }}>⚡ Speed</Text>
-            {SPEEDS.map(sp => (
-              <TouchableOpacity key={sp} style={[{ padding: 14, borderTopWidth: 0.5, borderColor: "#333" }, speed === sp && { backgroundColor: "#FF6B00" }]} onPress={() => { setSpeed(sp); videoRef.current?.setRateAsync(sp, true); setShowSpeed(false); }}>
-                <Text style={{ color: "#fff", textAlign: "center" }}>{sp}x {sp === 1 ? "(Normal)" : ""}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
-  );
+  const togglePlay = async () => {
+    if (!videoRef.current) return;
+    isPlaying ? await videoRef.current.pauseAsync() : await videoRef.current.playAsync();
+    setIsPlaying(!isPlaying);
+  };
 
-  if (screen === "history") return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => setScreen("home")}><Text style={s.back}>←</Text></TouchableOpacity>
-        <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>🕐 History</Text>
-        <TouchableOpacity onPress={() => { setHistory([]); AsyncStorage.removeItem("history"); }}>
-          <Text style={{ color: "#f44" }}>Clear</Text>
-        </TouchableOpacity>
-      </View>
-      {history.length === 0 ? (
-        <View style={s.empty}><Text style={{ fontSize: 50 }}>🕐</Text><Text style={{ color: "#888" }}>No history</Text></View>
-      ) : (
-        <FlatList data={history} keyExtractor={(x, i) => x.id + i} contentContainerStyle={{ padding: 12 }} renderItem={({ item, index }) => (
-          <TouchableOpacity style={s.card} onPress={() => play(item, index)}>
-            <Text style={{ fontSize: 28 }}>🎥</Text>
-            <Text style={s.cardTxt} numberOfLines={1}>{item.name}</Text>
-          </TouchableOpacity>
-        )} />
-      )}
-    </View>
-  );
-
-  if (screen === "network") return (
-    <View style={{ flex: 1, backgroundColor: "#000", padding: 20 }}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => setScreen("home")}><Text style={s.back}>←</Text></TouchableOpacity>
-        <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>🌐 Network</Text>
-      </View>
-      <Text style={{ color: "#888", marginTop: 16, marginBottom: 8 }}>Video URL பேஸ்ட் பண்ணு:</Text>
-      <TextInput style={{ backgroundColor: "#111", color: "#fff", borderRadius: 12, padding: 14, fontSize: 14, borderWidth: 1, borderColor: "#FF6B00" }} placeholder="https://..." placeholderTextColor="#666" value={netUrl} onChangeText={setNetUrl} autoCapitalize="none" />
-      <TouchableOpacity style={{ backgroundColor: "#FF6B00", padding: 16, borderRadius: 12, alignItems: "center", marginTop: 12 }} onPress={() => { if (netUrl.trim()) play({ id: "net" + Date.now(), uri: netUrl.trim(), name: "Stream" }, 0); }}>
-        <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>▶ Play</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const changeSpeed = async (s) => { setSpeed(s); if (videoRef.current) await videoRef.current.setRateAsync(s, true); };
+  const formatTime = (ms) => { const s = Math.floor(ms/1000); return Math.floor(s/60)+':'+(s%60).toString().padStart(2,'0'); };
+  const playAt = (i) => { setCurrentIndex(i); setVideoUri(playlist[i].uri); setSubtitleText(''); };
+  const seek = async (secs) => { if (videoRef.current) await videoRef.current.setPositionAsync(position+secs*1000); };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <View style={s.header}>
-        <Text style={{ color: "#FF6B00", fontSize: 22, fontWeight: "900" }}>⚡ NexPlayer</Text>
-        <TouchableOpacity onPress={() => setScreen("history")}><Text style={{ fontSize: 22 }}>🕐</Text></TouchableOpacity>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 12, paddingVertical: 8, maxHeight: 56 }}>
-        <TouchableOpacity style={[s.aBtn, { backgroundColor: "#FF6B00" }]} onPress={pickVideo}><Text style={s.aBtnTxt}>📁 Add</Text></TouchableOpacity>
-        <TouchableOpacity style={[s.aBtn, { backgroundColor: "#1a1a1a" }]} onPress={loadGallery}><Text style={s.aBtnTxt}>🖼 Gallery</Text></TouchableOpacity>
-        <TouchableOpacity style={[s.aBtn, { backgroundColor: "#1a1a1a" }]} onPress={() => setScreen("network")}><Text style={s.aBtnTxt}>🌐 Network</Text></TouchableOpacity>
-        <TouchableOpacity style={[s.aBtn, { backgroundColor: "#1a1a1a" }]} onPress={() => setVideos([])}><Text style={[s.aBtnTxt, { color: "#f44" }]}>🗑 Clear</Text></TouchableOpacity>
-      </ScrollView>
-      {videos.length === 0 ? (
-        <View style={s.empty}>
-          <Text style={{ fontSize: 64 }}>🎬</Text>
-          <Text style={{ color: "#888", marginTop: 8, fontSize: 16 }}>No videos yet</Text>
-          <Text style={{ color: "#555", fontSize: 13 }}>Add or Gallery tap பண்ணு</Text>
-        </View>
+    <View style={[s.bg, isFullscreen && s.fs]}>
+      <StatusBar hidden={isFullscreen} />
+      {!isFullscreen && <Text style={s.title}>NexPlayer</Text>}
+      {videoUri ? (
+        <TouchableOpacity activeOpacity={1} onPress={() => setShowControls(!showControls)}>
+          <View>
+            <Video ref={videoRef} source={{uri:videoUri}} style={isFullscreen?s.fsVideo:s.video}
+              resizeMode={ResizeMode.CONTAIN} volume={volume} shouldPlay={false}
+              onPlaybackStatusUpdate={(st) => { if (st.isLoaded) { setPosition(st.positionMillis); setDuration(st.durationMillis||1); setIsPlaying(st.isPlaying); } }} />
+            {subtitleText?<Text style={s.sub}>{subtitleText}</Text>:null}
+          </View>
+        </TouchableOpacity>
       ) : (
-        <FlatList data={videos} keyExtractor={x => String(x.id)} contentContainerStyle={{ padding: 12 }} renderItem={({ item, index }) => (
-          <TouchableOpacity style={s.card} onPress={() => play(item, index)}>
-            <View style={{ width: 64, height: 48, backgroundColor: "#111", borderRadius: 8, justifyContent: "center", alignItems: "center" }}>
-              <Text style={{ fontSize: 26 }}>🎥</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.cardTxt} numberOfLines={2}>{item.name}</Text>
-              {item.duration ? <Text style={{ color: "#888", fontSize: 12 }}>{fmt(item.duration * 1000)}</Text> : null}
-            </View>
-            <TouchableOpacity onPress={() => setVideos(p => p.filter(v => v.id !== item.id))}>
-              <Text style={{ color: "#f44", fontSize: 18, padding: 8 }}>✕</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )} />
+        <TouchableOpacity style={s.box} onPress={pickVideo}>
+          <Text style={s.boxIcon}>📂</Text>
+          <Text style={s.boxTxt}>Video Select பண்ணு</Text>
+        </TouchableOpacity>
+      )}
+      {videoUri && showControls && (
+        <ScrollView style={s.ctrlBox}>
+          <Text style={s.time}>{formatTime(position)} / {formatTime(duration)}</Text>
+          <View style={s.bar}><View style={[s.fill,{width:`${(position/duration)*100}%`}]} /></View>
+          <View style={s.ctrl}>
+            <TouchableOpacity onPress={()=>seek(-10)}><Text style={s.ct}>⏪</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>currentIndex>0&&playAt(currentIndex-1)}><Text style={s.ct}>⏮</Text></TouchableOpacity>
+            <TouchableOpacity style={s.playBtn} onPress={togglePlay}><Text style={s.pt}>{isPlaying?'⏸':'▶'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>currentIndex<playlist.length-1&&playAt(currentIndex+1)}><Text style={s.ct}>⏭</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>seek(10)}><Text style={s.ct}>⏩</Text></TouchableOpacity>
+            <TouchableOpacity onPress={()=>setIsFullscreen(!isFullscreen)}><Text style={s.ct}>{isFullscreen?'⬜':'⛶'}</Text></TouchableOpacity>
+          </View>
+          <View style={s.row}>{[0.5,0.75,1.0,1.25,1.5,2.0].map(sp=>(<TouchableOpacity key={sp} onPress={()=>changeSpeed(sp)} style={[s.chip,speed===sp&&s.on]}><Text style={s.cht}>{sp}x</Text></TouchableOpacity>))}</View>
+          <View style={s.row}>{[0.25,0.5,0.75,1.0].map(v=>(<TouchableOpacity key={v} onPress={()=>setVolume(v)} style={[s.chip,volume===v&&s.on]}><Text style={s.cht}>{Math.round(v*100)}%</Text></TouchableOpacity>))}</View>
+          <View style={s.actRow}>
+            <TouchableOpacity style={s.actBtn} onPress={pickSubtitle}><Text style={s.at}>📝 Subtitle</Text></TouchableOpacity>
+            <TouchableOpacity style={s.actBtn} onPress={pickVideo}><Text style={s.at}>+ Video</Text></TouchableOpacity>
+            <TouchableOpacity style={s.actBtn} onPress={()=>{setVideoUri(null);setPlaylist([]);}}><Text style={s.at}>🏠 Home</Text></TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop:8}}>
+            {playlist.map((f,i)=>(<TouchableOpacity key={i} onPress={()=>playAt(i)} style={[s.pi,i===currentIndex&&s.po]}><Text style={s.pt2} numberOfLines={1}>{f.name}</Text></TouchableOpacity>))}
+          </ScrollView>
+        </ScrollView>
       )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 44, paddingBottom: 12, backgroundColor: "#111" },
-  back: { color: "#fff", fontSize: 18, marginRight: 8 },
-  card: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 12, padding: 12, marginBottom: 8, gap: 12 },
-  cardTxt: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  aBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
-  aBtnTxt: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "space-between" },
-  topBar: { flexDirection: "row", alignItems: "center", paddingTop: 44, paddingHorizontal: 16, paddingBottom: 8 },
-  title: { flex: 1, color: "#fff", fontSize: 13 },
-  center: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 20 },
-  btn: { fontSize: 32, color: "#fff" },
-  prog: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 8 },
-  time: { color: "#fff", fontSize: 12, width: 44, textAlign: "center" },
-  bot: { flexDirection: "row", justifyContent: "space-around", paddingBottom: 28, paddingTop: 8 },
-  botBtn: { backgroundColor: "rgba(255,255,255,0.15)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  botTxt: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center" },
+  bg:{flex:1,backgroundColor:'#0a0a0a'},
+  fs:{backgroundColor:'#000'},
+  title:{color:'#FF6B00',fontSize:22,fontWeight:'bold',textAlign:'center',paddingTop:40,paddingBottom:8},
+  video:{width,height:220,backgroundColor:'#000'},
+  fsVideo:{width,height:'100%',backgroundColor:'#000'},
+  sub:{position:'absolute',bottom:20,left:0,right:0,textAlign:'center',color:'#fff',fontSize:16,backgroundColor:'rgba(0,0,0,0.6)',padding:4},
+  box:{width:width-40,height:200,backgroundColor:'#1a1a1a',borderRadius:14,justifyContent:'center',alignItems:'center',borderWidth:2,borderColor:'#FF6B00',borderStyle:'dashed',marginTop:40,alignSelf:'center'},
+  boxIcon:{fontSize:48},
+  boxTxt:{color:'#FF6B00',fontSize:15,marginTop:8},
+  ctrlBox:{paddingHorizontal:16,paddingTop:8},
+  time:{color:'#888',fontSize:12,textAlign:'center'},
+  bar:{width:'100%',height:4,backgroundColor:'#333',borderRadius:2,marginTop:4},
+  fill:{height:4,backgroundColor:'#FF6B00',borderRadius:2},
+  ctrl:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:14,marginTop:12},
+  ct:{fontSize:24,color:'#fff'},
+  playBtn:{backgroundColor:'#FF6B00',width:60,height:60,borderRadius:30,justifyContent:'center',alignItems:'center'},
+  pt:{fontSize:24,color:'#fff'},
+  row:{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:10,justifyContent:'center'},
+  chip:{backgroundColor:'#1a1a1a',paddingHorizontal:10,paddingVertical:5,borderRadius:8,borderWidth:1,borderColor:'#333'},
+  on:{borderColor:'#FF6B00',backgroundColor:'#2a1500'},
+  cht:{color:'#fff',fontSize:12},
+  actRow:{flexDirection:'row',gap:8,marginTop:10,justifyContent:'center'},
+  actBtn:{backgroundColor:'#1a1a1a',paddingHorizontal:14,paddingVertical:8,borderRadius:8,borderWidth:1,borderColor:'#FF6B00'},
+  at:{color:'#FF6B00',fontSize:12},
+  pi:{padding:8,backgroundColor:'#1a1a1a',marginRight:8,borderRadius:8,maxWidth:150},
+  po:{backgroundColor:'#2a1500',borderWidth:1,borderColor:'#FF6B00'},
+  pt2:{color:'#fff',fontSize:12},
 });
