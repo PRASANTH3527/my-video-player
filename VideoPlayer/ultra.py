@@ -1,4 +1,4 @@
-f=open('App.tsx','w')
-f.write(open('App.tsx.save').read())
+f = open('App.tsx', 'w')
+f.write('test')
 f.close()
-print('done')
+print('ready')

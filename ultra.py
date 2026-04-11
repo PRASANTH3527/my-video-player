@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
+f = open('App.tsx', 'w')
+f.write("""import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, Dimensions, ScrollView, TextInput, Modal, Alert, PanResponder } from "react-native";
 import { Video, ResizeMode } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
@@ -14,7 +15,11 @@ const THEMES = {
   PURPLE: { bg: "#0d0a1a", surface: "#1a1025", card: "#241535", accent: "#8B5CF6", text: "#fff", sub: "#9CA3AF", border: "#2d1f3d" },
   RED: { bg: "#1a0000", surface: "#2d0a0a", card: "#3d1212", accent: "#EF4444", text: "#fff", sub: "#9CA3AF", border: "#4d1a1a" },
 };
-
+""")
+f.close()
+print("Part 1 done!")
+f = open('App.tsx', 'a')
+f.write("""
 export default function App() {
   const [tab, setTab] = useState("home");
   const [screen, setScreen] = useState("home");
@@ -53,7 +58,11 @@ export default function App() {
   const lastTap = useRef({ t: 0 });
   const swipeRef = useRef({ y: 0, x: 0, side: null });
   const ctrlTimer = useRef(null);
-
+""")
+f.close()
+print("Part 2 done!")
+f = open('App.tsx', 'a')
+f.write("""
   useEffect(() => {
     loadData();
     MediaLibrary.requestPermissionsAsync();
@@ -159,7 +168,11 @@ export default function App() {
 
   const pct = dur > 0 ? (pos / dur) * 100 : 0;
   const filtered = videos.filter(v => v.name?.toLowerCase().includes(search.toLowerCase()));
-
+""")
+f.close()
+print("Part 3 done!")
+f = open('App.tsx', 'a')
+f.write("""
   if (screen === "player" && current) return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
       <StatusBar hidden />
@@ -215,14 +228,22 @@ export default function App() {
         </View>
       )}
       {locked && <TouchableOpacity style={st.lockScreen} onPress={() => setLocked(false)}><View style={st.lockBox}><Text style={{ fontSize: 40 }}>🔒</Text><Text style={{ color: "#fff", marginTop: 12 }}>Tap to unlock</Text></View></TouchableOpacity>}
-
+""")
+f.close()
+print("Part 4 done!")
+f = open('App.tsx', 'a')
+f.write("""
       <Modal visible={showSpeed} transparent animationType="slide"><TouchableOpacity style={st.modalBg} onPress={() => setShowSpeed(false)}><View style={[st.sheet, { backgroundColor: theme.surface }]}><View style={st.handle} /><Text style={[st.sheetTitle, { color: theme.text }]}>⚡ Speed</Text>{SPEEDS.map(sp => (<TouchableOpacity key={sp} style={[st.sheetRow, sp === speed && { backgroundColor: theme.accent + "22" }]} onPress={() => { setSpeed(sp); videoRef.current?.setRateAsync(sp, true); setShowSpeed(false); }}><Text style={[st.sheetRowTxt, { color: sp === speed ? theme.accent : theme.text }]}>{sp === 1.0 ? "Normal (1x)" : sp + "x"}</Text>{sp === speed && <Text style={{ color: theme.accent }}>✓</Text>}</TouchableOpacity>))}</View></TouchableOpacity></Modal>
       <Modal visible={showSleep} transparent animationType="slide"><TouchableOpacity style={st.modalBg} onPress={() => setShowSleep(false)}><View style={[st.sheet, { backgroundColor: theme.surface }]}><View style={st.handle} /><Text style={[st.sheetTitle, { color: theme.text }]}>😴 Sleep Timer</Text>{[5,10,15,20,30,45,60,90].map(m => (<TouchableOpacity key={m} style={[st.sheetRow, sleepMin === m && { backgroundColor: theme.accent + "22" }]} onPress={() => startSleep(m)}><Text style={[st.sheetRowTxt, { color: sleepMin === m ? theme.accent : theme.text }]}>{m} minutes</Text>{sleepMin === m && <Text style={{ color: theme.accent }}>✓</Text>}</TouchableOpacity>))}<TouchableOpacity style={st.sheetRow} onPress={() => startSleep(0)}><Text style={[st.sheetRowTxt, { color: "#f44" }]}>Cancel Timer</Text></TouchableOpacity></View></TouchableOpacity></Modal>
       <Modal visible={showInfo} transparent animationType="fade"><TouchableOpacity style={st.modalBg} onPress={() => setShowInfo(false)}><View style={[st.sheet, { backgroundColor: theme.surface }]}><View style={st.handle} /><Text style={[st.sheetTitle, { color: theme.text }]}>ℹ️ Info</Text><Text style={[st.infoTxt, { color: theme.sub }]}>📄 {current?.name}</Text><Text style={[st.infoTxt, { color: theme.sub }]}>⏱ {fmt(dur)}</Text><Text style={[st.infoTxt, { color: theme.sub }]}>📍 {fmt(pos)}</Text><Text style={[st.infoTxt, { color: theme.sub }]}>⚡ {speed}x</Text><Text style={[st.infoTxt, { color: theme.sub }]}>🔁 {loop}</Text><Text style={[st.infoTxt, { color: theme.sub }]}>🔊 {Math.round(volume * 100)}%</Text></View></TouchableOpacity></Modal>
       <Modal visible={showTheme} transparent animationType="slide"><TouchableOpacity style={st.modalBg} onPress={() => setShowTheme(false)}><View style={[st.sheet, { backgroundColor: theme.surface }]}><View style={st.handle} /><Text style={[st.sheetTitle, { color: theme.text }]}>🎨 Theme</Text>{Object.keys(THEMES).map(t => (<TouchableOpacity key={t} style={[st.sheetRow, themeName === t && { backgroundColor: THEMES[t].accent + "22" }]} onPress={() => { setThemeName(t); setTheme(THEMES[t]); AsyncStorage.setItem("theme", t); setShowTheme(false); }}><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: THEMES[t].accent }} /><Text style={[st.sheetRowTxt, { color: themeName === t ? THEMES[t].accent : theme.text }]}>{t}</Text></View>{themeName === t && <Text style={{ color: THEMES[t].accent }}>✓</Text>}</TouchableOpacity>))}</View></TouchableOpacity></Modal>
     </View>
   );
-
+""")
+f.close()
+print("Part 5 done!")
+f = open('App.tsx', 'a')
+f.write("""
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle="light-content" backgroundColor={theme.bg} />
@@ -344,7 +365,11 @@ export default function App() {
     </View>
   );
 }
-
+""")
+f.close()
+print("Part 6 done!")
+f = open('App.tsx', 'a')
+f.write("""
 const st = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, justifyContent: "space-between" },
   topGrad: { flexDirection: "row", alignItems: "center", paddingTop: 44, paddingHorizontal: 12, paddingBottom: 12, backgroundColor: "rgba(0,0,0,0.75)", gap: 4 },
@@ -418,3 +443,6 @@ const hd = StyleSheet.create({
   supportTitle: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
   supportTxt: { fontSize: 13 },
 });
+""")
+f.close()
+print("ALL DONE! Ultimate NexPlayer Pro complete!")
